@@ -1,0 +1,16 @@
+{
+  "node": "n8n-nodes-opengauss-datavec.openGaussDataVec",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["AI"],
+  "subcategories": {
+    "AI": ["Vector Stores"]
+  },
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://docs.opengauss.org/"
+      }
+    ]
+  }
+}
