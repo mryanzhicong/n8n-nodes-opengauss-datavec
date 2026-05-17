@@ -1,6 +1,7 @@
 // Test that the node module loads correctly
-const pkg = require('/root/n8n/n8n-nodes-opengauss-datavec/dist/nodes/VectorStoreOpenGauss/VectorStoreOpenGauss.node.js');
-const credPkg = require('/root/n8n/n8n-nodes-opengauss-datavec/dist/credentials/OpenGaussDataVec.credentials.js');
+const path = require('path');
+const pkg = require(path.resolve(__dirname, '../dist/nodes/VectorStoreOpenGauss/VectorStoreOpenGauss.node.js'));
+const credPkg = require(path.resolve(__dirname, '../dist/credentials/OpenGaussDataVec.credentials.js'));
 
 console.log('=== Node Load Test ===\n');
 
