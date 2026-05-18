@@ -24,7 +24,7 @@
 | 组件 | 要求 |
 |------|------|
 | openGauss | 7.0+ 版本，需支持 DataVec 向量引擎 |
-| Node.js | >= 22.16 |
+| Node.js | >= 24 |
 | pnpm | >= 10.22.0 |
 | n8n | 本地开发环境（monorepo 形式，位于 `/root/n8n`） |
 | 网络 | 测试机器能连接 openGauss 数据库实例 |

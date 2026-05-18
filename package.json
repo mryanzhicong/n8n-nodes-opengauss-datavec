@@ -22,7 +22,7 @@
     "url": "https://github.com/mryanzhicong/n8n-nodes-opengauss-datavec/issues"
   },
   "engines": {
-    "node": ">=20.15"
+    "node": ">=24"
   },
   "main": "dist/nodes/VectorStoreOpenGauss/VectorStoreOpenGauss.node.js",
   "files": [
@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.10.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^24.0.0",
     "n8n-workflow": "*",
     "typescript": "^5.3.0",
     "jest": "^29.7.0",
