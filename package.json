@@ -46,7 +46,8 @@
     ]
   },
   "dependencies": {
-    "pg": "^8.11.0"
+    "pg": "^8.11.0",
+    "@langchain/core": ">=0.3.0"
   },
   "devDependencies": {
     "@types/pg": "^8.10.0",
@@ -60,6 +61,7 @@
     "copyfiles": "^2.4.1"
   },
   "peerDependencies": {
-    "n8n-workflow": "*"
+    "n8n-workflow": "*",
+    "@langchain/core": ">=0.3.0"
   }
 }

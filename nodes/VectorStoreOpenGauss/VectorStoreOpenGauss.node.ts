@@ -8,20 +8,74 @@ import {
 	type INodeType,
 	type INodeTypeDescription,
 	type INodeProperties,
+	type ISupplyDataFunctions,
+	type SupplyData,
 } from 'n8n-workflow';
+
+import type { EmbeddingsInterface } from '@langchain/core/embeddings';
+import { Document } from '@langchain/core/documents';
+import { DynamicTool } from '@langchain/core/tools';
 
 import {
 	DataVecClient,
 	type DataVecConfig,
 	type DistanceStrategy,
-	type IndexType,
 } from './datavecClient';
 
+import { OpenGaussVectorStore, type OpenGaussVectorStoreConfig } from './OpenGaussVectorStore';
+
 // ============================================================
-// Operation Definitions
+// Mode Property
 // ============================================================
 
-const distanceStrategyOptions: INodeProperties = {
+const modeProperty: INodeProperties = {
+	displayName: 'Mode',
+	name: 'mode',
+	type: 'options',
+	noDataExpression: true,
+	options: [
+		{
+			name: 'Get Many',
+			value: 'load',
+			description: 'Get many ranked documents from vector store for use in a data pipeline',
+			action: 'Get many ranked documents from vector store',
+		},
+		{
+			name: 'Insert Documents',
+			value: 'insert',
+			description: 'Insert documents into vector store',
+			action: 'Insert documents into vector store',
+		},
+		{
+			name: 'Retrieve Documents (As Vector Store)',
+			value: 'retrieve',
+			description: 'Retrieve documents from vector store to provide to AI nodes',
+			action: 'Retrieve documents for AI processing',
+		},
+		{
+			name: 'Retrieve Documents (As Tool for AI Agent)',
+			value: 'retrieve-as-tool',
+			description: 'Retrieve documents from vector store to use as a tool with an AI agent',
+			action: 'Retrieve documents as tool for AI agent',
+		},
+	],
+	default: 'retrieve',
+};
+
+// ============================================================
+// Shared Parameters
+// ============================================================
+
+const tableNameProperty: INodeProperties = {
+	displayName: 'Table Name',
+	name: 'tableName',
+	type: 'string',
+	required: true,
+	default: '',
+	description: 'Name of the vector table',
+};
+
+const distanceStrategyProperty: INodeProperties = {
 	displayName: 'Distance Strategy',
 	name: 'distanceStrategy',
 	type: 'options',
@@ -51,364 +105,87 @@ const distanceStrategyOptions: INodeProperties = {
 	description: 'Distance strategy for vector comparison',
 };
 
-const operations: INodeProperties[] = [
-	{
-		displayName: 'Operation',
-		name: 'operation',
-		type: 'options',
-		noDataExpression: true,
-		options: [
-			{
-				name: 'Vector Search',
-				value: 'vectorSearch',
-				description: 'Search for similar vectors',
-				action: 'Search for similar vectors',
-			},
-			{
-				name: 'Insert Documents',
-				value: 'insertDocuments',
-				description: 'Insert documents and vectors',
-				action: 'Insert documents and vectors',
-			},
-			{
-				name: 'Create Index',
-				value: 'createIndex',
-				description: 'Create a vector index',
-				action: 'Create a vector index',
-			},
-			{
-				name: 'Execute Query',
-				value: 'executeQuery',
-				description: 'Execute a custom SQL query',
-				action: 'Execute a custom SQL query',
-			},
-		],
-		default: 'vectorSearch',
-	},
-];
-
-// ============================================================
-// Vector Search Parameters
-// ============================================================
-
-const vectorSearchParameters: INodeProperties[] = [
-	{
-		displayName: 'Table Name',
-		name: 'tableName',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'Name of the table to search in',
-	},
-	{
-		displayName: 'Query Vector',
-		name: 'queryVector',
-		type: 'string',
-		required: true,
-		default: '',
-		placeholder: '[0.1, 0.2, 0.3, ...]',
-		description: 'Vector to search for, as a JSON array of numbers',
-	},
-	{
-		displayName: 'Limit',
-		name: 'limit',
-		type: 'number',
-		default: 10,
-		description: 'Maximum number of results to return',
-	},
-	{
-		...distanceStrategyOptions,
-		displayOptions: {
-			show: {
-				operation: ['vectorSearch'],
-			},
+const dimensionsProperty: INodeProperties = {
+	displayName: 'Dimensions',
+	name: 'dimensions',
+	type: 'number',
+	default: undefined,
+	description: 'Vector dimensions, required if creating table',
+	displayOptions: {
+		show: {
+			mode: ['insert'],
 		},
 	},
-	{
-		displayName: 'Options',
-		name: 'options',
-		type: 'collection',
-		placeholder: 'Add Option',
-		default: {},
-		displayOptions: {
-			show: {
-				operation: ['vectorSearch'],
-			},
-		},
-		options: [
-			{
-				displayName: 'EF Search',
-				name: 'efSearch',
-				type: 'number',
-				default: undefined,
-				description: 'HNSW ef_search parameter',
-			},
-			{
-				displayName: 'Probes',
-				name: 'probes',
-				type: 'number',
-				default: undefined,
-				description: 'IVFFLAT probes parameter',
-			},
-			{
-				displayName: 'Metadata Filter',
-				name: 'metadataFilter',
-				type: 'string',
-				default: '',
-				placeholder: '{"key": "value"}',
-				description: 'JSON metadata filter',
-			},
-		],
-	},
-];
+};
 
-// ============================================================
-// Insert Documents Parameters
-// ============================================================
-
-const insertDocumentsParameters: INodeProperties[] = [
-	{
-		displayName: 'Table Name',
-		name: 'tableName',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'Name of the table to insert into',
-	},
-	{
-		displayName: 'Documents',
-		name: 'documents',
-		type: 'fixedCollection',
-		typeOptions: {
-			multipleValues: true,
-		},
-		default: {},
-		placeholder: 'Add Document',
-		description: 'Documents to insert with embeddings',
-		displayOptions: {
-			show: {
-				operation: ['insertDocuments'],
-			},
-		},
-		options: [
-			{
-				name: 'documentValues',
-				displayName: 'Document',
-				values: [
-					{
-						displayName: 'Content',
-						name: 'content',
-						type: 'string',
-						required: true,
-						default: '',
-						description: 'Text content of the document',
-					},
-					{
-						displayName: 'Embedding',
-						name: 'embedding',
-						type: 'string',
-						required: true,
-						default: '',
-						placeholder: '[0.1, 0.2, 0.3, ...]',
-						description: 'Vector embedding as a JSON array of numbers',
-					},
-					{
-						displayName: 'Metadata',
-						name: 'metadata',
-						type: 'string',
-						default: '',
-						placeholder: '{"key": "value"}',
-						description: 'JSON metadata for the document',
-					},
-				],
-			},
-		],
-	},
-	{
-		displayName: 'Options',
-		name: 'options',
-		type: 'collection',
-		placeholder: 'Add Option',
-		default: {},
-		displayOptions: {
-			show: {
-				operation: ['insertDocuments'],
-			},
-		},
-		options: [
-			{
-				displayName: 'Create Table If Not Exists',
-				name: 'createTableIfNotExists',
-				type: 'boolean',
-				default: true,
-				description: 'Whether to create the table if it does not exist',
-			},
-			{
-				displayName: 'Dimensions',
-				name: 'dimensions',
-				type: 'number',
-				default: undefined,
-				description: 'Vector dimensions, required if creating table',
-			},
-		],
-	},
-];
-
-// ============================================================
-// Create Index Parameters
-// ============================================================
-
-const createIndexParameters: INodeProperties[] = [
-	{
-		displayName: 'Table Name',
-		name: 'tableName',
-		type: 'string',
-		required: true,
-		default: '',
-		description: 'Name of the table to create the index on',
-	},
-	{
-		displayName: 'Index Type',
-		name: 'indexType',
-		type: 'options',
-		options: [
-			{
-				name: 'HNSW',
-				value: 'hnsw',
-				description: 'Hierarchical Navigable Small World graph index',
-			},
-			{
-				name: 'IVFFLAT',
-				value: 'ivfflat',
-				description: 'Inverted File with Flat compression index',
-			},
-			{
-				name: 'DISKANN',
-				value: 'diskann',
-				description: 'Disk-based Approximate Nearest Neighbor index',
-			},
-		],
-		default: 'hnsw',
-		description: 'Type of vector index to create',
-	},
-	{
-		...distanceStrategyOptions,
-		displayOptions: {
-			show: {
-				operation: ['createIndex'],
-			},
+const promptProperty: INodeProperties = {
+	displayName: 'Prompt',
+	name: 'prompt',
+	type: 'string',
+	default: '',
+	required: true,
+	description: 'Search prompt to retrieve matching documents',
+	displayOptions: {
+		show: {
+			mode: ['load'],
 		},
 	},
-	{
-		displayName: 'Options',
-		name: 'options',
-		type: 'collection',
-		placeholder: 'Add Option',
-		default: {},
-		displayOptions: {
-			show: {
-				operation: ['createIndex'],
-			},
+};
+
+const toolDescriptionProperty: INodeProperties = {
+	displayName: 'Tool Description',
+	name: 'toolDescription',
+	type: 'string',
+	default: 'Search in openGauss DataVec vector store',
+	required: true,
+	description: 'Description of this tool for the AI agent',
+	displayOptions: {
+		show: {
+			mode: ['retrieve-as-tool'],
 		},
-		options: [
-			{
-				displayName: 'Index Name',
-				name: 'indexName',
-				type: 'string',
-				default: '',
-				description: 'Custom name for the index',
-			},
-			{
-				displayName: 'M',
-				name: 'm',
-				type: 'number',
-				default: 16,
-				description: 'HNSW M parameter (max connections per layer)',
-				displayOptions: {
-					show: {
-						'/indexType': ['hnsw'],
-					},
-				},
-			},
-			{
-				displayName: 'EF Construction',
-				name: 'efConstruction',
-				type: 'number',
-				default: 64,
-				description: 'HNSW ef_construction parameter (build-time search width)',
-				displayOptions: {
-					show: {
-						'/indexType': ['hnsw'],
-					},
-				},
-			},
-			{
-				displayName: 'Lists',
-				name: 'lists',
-				type: 'number',
-				default: 100,
-				description: 'IVFFLAT lists parameter (number of clusters)',
-				displayOptions: {
-					show: {
-						'/indexType': ['ivfflat'],
-					},
-				},
-			},
-		],
 	},
-];
+};
 
-// ============================================================
-// Execute Query Parameters
-// ============================================================
-
-const executeQueryParameters: INodeProperties[] = [
-	{
-		displayName: 'Query',
-		name: 'query',
-		type: 'string',
-		required: true,
-		typeOptions: {
-			rows: 5,
-			editor: 'sqlEditor',
+const metadataFilterProperty: INodeProperties = {
+	displayName: 'Metadata Filter',
+	name: 'metadataFilter',
+	type: 'string',
+	default: '',
+	placeholder: '{"key": "value"}',
+	description: 'JSON metadata filter for search results',
+	displayOptions: {
+		show: {
+			mode: ['load', 'retrieve', 'retrieve-as-tool'],
 		},
-		default: '',
-		description: 'SQL query to execute',
 	},
-];
+};
+
+const topKProperty: INodeProperties = {
+	displayName: 'Top K',
+	name: 'topK',
+	type: 'number',
+	default: 10,
+	description: 'Number of results to return',
+	displayOptions: {
+		show: {
+			mode: ['load', 'retrieve', 'retrieve-as-tool'],
+		},
+	},
+};
 
 // ============================================================
-// All Properties (with displayOptions for each operation)
+// All Properties
 // ============================================================
-
-function withOperationDisplayOptions(
-	params: INodeProperties[],
-	operationsList: string[],
-): INodeProperties[] {
-	return params.map((param) => {
-		// Skip the operation selector itself
-		if (param.name === 'operation') return param;
-		// Skip parameters that already have their own displayOptions
-		if (param.displayOptions?.show?.operation) return param;
-
-		return {
-			...param,
-			displayOptions: {
-				show: {
-					operation: operationsList,
-					...(param.displayOptions?.show ?? {}),
-				},
-			},
-		};
-	});
-}
 
 const allProperties: INodeProperties[] = [
-	...operations,
-	...withOperationDisplayOptions(vectorSearchParameters, ['vectorSearch']),
-	...withOperationDisplayOptions(insertDocumentsParameters, ['insertDocuments']),
-	...withOperationDisplayOptions(createIndexParameters, ['createIndex']),
-	...withOperationDisplayOptions(executeQueryParameters, ['executeQuery']),
+	modeProperty,
+	tableNameProperty,
+	distanceStrategyProperty,
+	promptProperty,
+	toolDescriptionProperty,
+	topKProperty,
+	dimensionsProperty,
+	metadataFilterProperty,
 ];
 
 // ============================================================
@@ -416,18 +193,38 @@ const allProperties: INodeProperties[] = [
 // ============================================================
 
 const nodeDescription: INodeTypeDescription = {
-	displayName: 'OpenGauss DataVec',
+	displayName: 'OpenGauss DataVec Vector Store',
 	name: 'openGaussDataVec',
 	icon: 'file:opengauss.svg',
 	group: ['transform'],
 	version: 1,
-	subtitle: '={{ $parameter["operation"] }}',
-	description: 'Interact with openGauss DataVec vector database',
+	subtitle: '= {"load": "Get Many", "insert": "Insert Documents", "retrieve": "Retrieve (Vector Store)", "retrieve-as-tool": "Retrieve (Tool)"}[$parameter["mode"]] ',
+	description: 'Work with openGauss DataVec vector database',
 	defaults: {
-		name: 'OpenGauss DataVec',
+		name: 'OpenGauss DataVec Vector Store',
 	},
-	inputs: [NodeConnectionTypes.Main],
-	outputs: [NodeConnectionTypes.Main],
+	inputs: `={{
+		((parameter) => {
+			const mode = parameter?.mode;
+			const inputs = [{ displayName: 'Embedding', type: 'ai_embedding', required: true, maxConnections: 1 }];
+			if (mode === 'insert' || mode === 'load') {
+				inputs.unshift({ displayName: '', type: 'main' });
+			}
+			return inputs;
+		})($parameter)
+	}}`,
+	outputs: `={{
+		((parameter) => {
+			const mode = parameter?.mode;
+			if (mode === 'insert' || mode === 'load') {
+				return [{ displayName: '', type: 'main' }];
+			}
+			if (mode === 'retrieve-as-tool') {
+				return [{ displayName: 'Tool', type: 'ai_tool' }];
+			}
+			return [{ displayName: 'Vector Store', type: 'ai_vectorStore' }];
+		})($parameter)
+	}}`,
 	credentials: [
 		{
 			name: 'openGaussDataVecApi',
@@ -495,23 +292,29 @@ export class VectorStoreOpenGauss implements INodeType {
 		},
 	};
 
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData: INodeExecutionData[] = [];
-
-		const operation = this.getNodeParameter('operation', 0) as string;
-
-		// Get credentials
+	async supplyData(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData> {
 		const credentials = await this.getCredentials('openGaussDataVecApi');
 
 		const sslConfig =
-			credentials.ssl === 'require'
-				? true
-				: credentials.ssl === 'disable' || credentials.ssl === 'allow'
-					? false
-					: undefined;
+			credentials.ssl === 'require' ? true
+			: credentials.ssl === 'disable' || credentials.ssl === 'allow' ? false
+			: undefined;
 
-		const config: DataVecConfig = {
+		const tableName = this.getNodeParameter('tableName', itemIndex) as string;
+		const distanceStrategy = this.getNodeParameter('distanceStrategy', itemIndex) as DistanceStrategy;
+		const topK = this.getNodeParameter('topK', itemIndex, 10) as number;
+		const metadataFilterStr = this.getNodeParameter('metadataFilter', itemIndex, '') as string;
+
+		let filter: Record<string, unknown> | undefined;
+		if (metadataFilterStr) {
+			try {
+				filter = JSON.parse(metadataFilterStr);
+			} catch {
+				throw new Error('Invalid metadata filter format. Expected a JSON object, e.g. {"key": "value"}');
+			}
+		}
+
+		const connectionConfig: DataVecConfig = {
 			host: credentials.host as string,
 			port: credentials.port as number,
 			database: credentials.database as string,
@@ -521,214 +324,138 @@ export class VectorStoreOpenGauss implements INodeType {
 			maxConnections: credentials.maxConnections as number | undefined,
 		};
 
-		const client = new DataVecClient(config);
+		const embeddings = (await this.getInputConnectionData(
+			NodeConnectionTypes.AiEmbedding,
+			itemIndex,
+		)) as EmbeddingsInterface;
 
-		try {
-			for (let i = 0; i < items.length; i++) {
+		const config: OpenGaussVectorStoreConfig = {
+			connectionConfig,
+			tableName,
+			distanceStrategy,
+		};
+
+		const vectorStore = new OpenGaussVectorStore(embeddings, config);
+
+		const mode = this.getNodeParameter('mode', itemIndex) as string;
+
+		if (mode === 'retrieve-as-tool') {
+			const toolDescription = this.getNodeParameter('toolDescription', itemIndex) as string;
+			const nodeName = this.getNode().name;
+
+			const tool = new DynamicTool({
+				name: nodeName.replace(/\s/g, '_'),
+				description: toolDescription,
+				func: async (query: string) => {
+					const docs = await vectorStore.similaritySearch(query, topK, filter);
+					return docs.map((d) => d.pageContent).join('\n\n');
+				},
+			});
+
+			return { response: tool };
+		}
+
+		return { response: vectorStore };
+	}
+
+	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
+
+		const credentials = await this.getCredentials('openGaussDataVecApi');
+		const sslConfig =
+			credentials.ssl === 'require' ? true
+			: credentials.ssl === 'disable' || credentials.ssl === 'allow' ? false
+			: undefined;
+
+		const tableName = this.getNodeParameter('tableName', 0) as string;
+		const distanceStrategy = this.getNodeParameter('distanceStrategy', 0) as DistanceStrategy;
+
+		const connectionConfig: DataVecConfig = {
+			host: credentials.host as string,
+			port: credentials.port as number,
+			database: credentials.database as string,
+			user: credentials.user as string,
+			password: credentials.password as string,
+			ssl: sslConfig,
+			maxConnections: credentials.maxConnections as number | undefined,
+		};
+
+		const embeddings = (await (this as unknown as ISupplyDataFunctions).getInputConnectionData(
+			NodeConnectionTypes.AiEmbedding,
+			0,
+		)) as EmbeddingsInterface;
+
+		const config: OpenGaussVectorStoreConfig = {
+			connectionConfig,
+			tableName,
+			distanceStrategy,
+		};
+
+		const mode = this.getNodeParameter('mode', 0) as string;
+
+		if (mode === 'load') {
+			const prompt = this.getNodeParameter('prompt', 0) as string;
+			const topK = this.getNodeParameter('topK', 0, 10) as number;
+			const metadataFilterStr = this.getNodeParameter('metadataFilter', 0, '') as string;
+
+			let filter: Record<string, unknown> | undefined;
+			if (metadataFilterStr) {
 				try {
-					switch (operation) {
-						case 'vectorSearch': {
-							const tableName = this.getNodeParameter('tableName', i) as string;
-							const queryVectorStr = this.getNodeParameter('queryVector', i) as string;
-							const limit = this.getNodeParameter('limit', i) as number;
-							const distanceStrategy = this.getNodeParameter('distanceStrategy', i) as DistanceStrategy;
-							const options = this.getNodeParameter('options', i, {}) as {
-								efSearch?: number;
-								probes?: number;
-								metadataFilter?: string;
-							};
-
-							let queryVector: number[];
-							try {
-								queryVector = JSON.parse(queryVectorStr);
-							} catch {
-								throw new Error(
-									'Invalid query vector format. Expected a JSON array of numbers, e.g. [0.1, 0.2, 0.3]',
-								);
-							}
-
-							let filter: Record<string, unknown> | undefined;
-							if (options.metadataFilter) {
-								try {
-									filter = JSON.parse(options.metadataFilter);
-								} catch {
-									throw new Error(
-										'Invalid metadata filter format. Expected a JSON object, e.g. {"key": "value"}',
-									);
-								}
-							}
-
-							const results = await client.similaritySearch({
-								tableName,
-								queryVector,
-								limit,
-								distanceStrategy,
-								filter,
-								efSearch: options.efSearch,
-								probes: options.probes,
-							});
-
-							for (const result of results) {
-								returnData.push({
-									json: {
-										id: result.id,
-										content: result.content,
-										metadata: result.metadata,
-										distance: result.distance,
-									},
-									pairedItem: { item: i },
-								});
-							}
-							break;
-						}
-
-						case 'insertDocuments': {
-							const tableName = this.getNodeParameter('tableName', i) as string;
-							const documentsData = this.getNodeParameter('documents', i) as {
-								documentValues?: Array<{
-									content: string;
-									embedding: string;
-									metadata?: string;
-								}>;
-							};
-							const options = this.getNodeParameter('options', i, {}) as {
-								createTableIfNotExists?: boolean;
-								dimensions?: number;
-							};
-
-							const docValues = documentsData.documentValues ?? [];
-							const documents = docValues.map((doc) => {
-								let embedding: number[];
-								try {
-									embedding = JSON.parse(doc.embedding);
-								} catch {
-									throw new Error(
-										`Invalid embedding format for document. Expected a JSON array of numbers`,
-									);
-								}
-
-								let metadata: Record<string, unknown> | undefined;
-								if (doc.metadata) {
-									try {
-										metadata = JSON.parse(doc.metadata);
-									} catch {
-										throw new Error(
-											`Invalid metadata format for document. Expected a JSON object`,
-										);
-									}
-								}
-
-								return {
-									content: doc.content,
-									embedding,
-									metadata,
-								};
-							});
-
-							// Create table if needed
-							if (options.createTableIfNotExists !== false) {
-								const dimensions = options.dimensions;
-								if (!dimensions && documents.length > 0) {
-									// Infer dimensions from the first document's embedding
-									const inferredDimensions = documents[0].embedding.length;
-									await client.createTable({
-										tableName,
-										dimensions: inferredDimensions,
-										ifNotExists: true,
-									});
-								} else if (dimensions) {
-									await client.createTable({
-										tableName,
-										dimensions,
-										ifNotExists: true,
-									});
-								}
-							}
-
-							const insertedCount = await client.insertDocuments({
-								tableName,
-								documents,
-							});
-
-							returnData.push({
-								json: {
-									insertedCount,
-									tableName,
-								},
-								pairedItem: { item: i },
-							});
-							break;
-						}
-
-						case 'createIndex': {
-							const tableName = this.getNodeParameter('tableName', i) as string;
-							const indexType = this.getNodeParameter('indexType', i) as IndexType;
-							const distanceStrategy = this.getNodeParameter(
-								'distanceStrategy',
-								i,
-							) as DistanceStrategy;
-							const options = this.getNodeParameter('options', i, {}) as {
-								indexName?: string;
-								m?: number;
-								efConstruction?: number;
-								lists?: number;
-							};
-
-							await client.createIndex({
-								tableName,
-								indexType,
-								distanceStrategy,
-								indexName: options.indexName || undefined,
-								m: options.m,
-								efConstruction: options.efConstruction,
-								lists: options.lists,
-							});
-
-							returnData.push({
-								json: {
-									success: true,
-									tableName,
-									indexType,
-									distanceStrategy,
-									indexName: options.indexName || `${tableName}_embedding_idx`,
-								},
-								pairedItem: { item: i },
-							});
-							break;
-						}
-
-						case 'executeQuery': {
-							const query = this.getNodeParameter('query', i) as string;
-
-							const rows = await client.executeQuery(query);
-
-							for (const row of rows as Array<Record<string, unknown>>) {
-								returnData.push({
-									json: row as { [key: string]: string | number | boolean | object | null | undefined },
-									pairedItem: { item: i },
-								});
-							}
-							break;
-						}
-
-						default:
-							throw new Error(`Unknown operation: ${operation}`);
-					}
-				} catch (error) {
-					if (this.continueOnFail()) {
-						returnData.push({
-							json: {
-								error: error instanceof Error ? error.message : String(error),
-							},
-							pairedItem: { item: i },
-						});
-						continue;
-					}
-					throw error;
+					filter = JSON.parse(metadataFilterStr);
+				} catch {
+					throw new Error('Invalid metadata filter format. Expected a JSON object, e.g. {"key": "value"}');
 				}
 			}
-		} finally {
-			await client.close();
+
+			const vectorStore = new OpenGaussVectorStore(embeddings, config);
+
+			try {
+				const queryVector = await embeddings.embedQuery(prompt);
+				const results = await vectorStore.similaritySearchVectorWithScore(queryVector, topK, filter);
+
+				for (const [doc, score] of results) {
+					returnData.push({
+						json: {
+							pageContent: doc.pageContent,
+							metadata: doc.metadata,
+							score,
+						},
+					});
+				}
+			} finally {
+				await vectorStore.close();
+			}
+		} else if (mode === 'insert') {
+			const dimensions = this.getNodeParameter('dimensions', 0, undefined) as number | undefined;
+			config.dimensions = dimensions;
+
+			const vectorStore = new OpenGaussVectorStore(embeddings, config);
+
+			try {
+				const documents: Document[] = [];
+				for (let i = 0; i < items.length; i++) {
+					const item = items[i];
+					const pageContent = (item.json.content as string) ||
+										(item.json.text as string) ||
+										(item.json.pageContent as string) ||
+										JSON.stringify(item.json);
+					const metadata = (item.json.metadata as Record<string, unknown>) || {};
+					documents.push(new Document({ pageContent, metadata }));
+				}
+
+				await vectorStore.addDocuments(documents);
+
+				returnData.push({
+					json: {
+						success: true,
+						insertedCount: documents.length,
+						tableName,
+					},
+				});
+			} finally {
+				await vectorStore.close();
+			}
 		}
 
 		return [returnData];
