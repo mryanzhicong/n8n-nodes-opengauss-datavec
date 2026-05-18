@@ -1,201 +1,154 @@
-# 基于 openGauss DataVec 搭建简单 RAG 工作流（n8n 快速上手）
+# 5 分钟跑通 RAG（openGauss DataVec + n8n）
 
-本文档记录在 n8n 中使用本社区节点 `n8n-nodes-opengauss-datavec` 搭建最小 RAG（入库 + 问答）工作流的完整步骤。
-
-## 1. 总览
-
-共 3 条独立工作流，通过共享同一张表 `kb_docs` 串联：
-
-| 序号 | 工作流 | 触发方式 | 频率 |
-|------|--------|----------|------|
-| 1 | `init-kb-table` | Manual Trigger | 仅运行一次（部署时） |
-| 2 | `rag-ingest` | Manual / Schedule / Webhook | 有新文档时 |
-| 3 | `rag-ask` | Webhook | 每次用户提问 |
-
-**关系**：工作流之间不直接连接，靠数据库共享数据。`rag-ingest` 写完表后，`rag-ask` 下次查询自然读到新数据。
-
-```
-[1] init-kb-table  ── 一次性建表
-        │
-        ├──→ [2] rag-ingest ── 写入 kb_docs
-        │
-        └──→ [3] rag-ask    ── 读取 kb_docs，调用 LLM 返回答案
-```
+本文带你用 **openGauss DataVec Store** 的 `Retrieve Documents (As Vector Store)` 模式，配合 n8n 的 **Question and Answer Chain**，在 5 分钟内搭起一条最小可问答的 RAG 工作流。适合刚装好节点、想立刻看到效果的同学。深入解释见 [VECTOR_STORE_GUIDE.md](./VECTOR_STORE_GUIDE.md)。
 
 ---
 
-## 2. 准备工作
+## 0. 前置准备
 
-1. 打开 n8n：`http://localhost:5678`
-2. 配置两个凭据：
-   - **OpenGauss DataVec**：Host=`localhost`，Port=`5432`，Database=`postgres`，User=`gaussdb`，Password=`openGauss@123`，建好后点 **Test** 验证连通性
-   - **OpenAI**：粘贴 API Key
-3. 确认 openGauss 7.0+ 已启动且支持 DataVec
+1. **n8n** 已运行，本包已安装（见 [USAGE_GUIDE.md §3](./USAGE_GUIDE.md)）
+2. **openGauss / DataVec** 实例可达，已创建凭证 `openGauss DataVec API`
+3. **Embeddings 节点**：任选其一
+   - `Embeddings OpenAI`（需 OpenAI Key，`text-embedding-3-small` 维度 1536）
+   - `Embeddings Ollama`（本地 `bge-base-zh` 维度 768，或 `nomic-embed-text` 维度 768）
+4. **LLM 节点**：任选其一
+   - `OpenAI Chat Model`
+   - `Ollama Chat Model`（本地 `qwen2.5:7b` 等）
+
+> 维度铁律：灌库的 Embeddings 与检索的 Embeddings **必须是同一个模型**，否则相似度无意义。
 
 ---
 
-## 3. 工作流 1：`init-kb-table`（一次性建表）
+## 1. 步骤一：建表（用 SQL 节点）
 
-**节点链**：Manual Trigger → OpenGauss DataVec
+> 可选步骤。如果你直接跑步骤二的 Insert Documents，节点会按 `Dimensions` 自动建表。提前建表的好处是可以加索引、自定义额外列。
 
-**OpenGauss DataVec 节点配置**：
-- Credential：OpenGauss DataVec
-- Operation：`Execute Query`
-- Query：
+新建工作流，拖 **openGauss** 节点：
+
+- **Operation** = `Execute Query`
+- **Query**：
 
 ```sql
-CREATE TABLE IF NOT EXISTS kb_docs (
-  id SERIAL PRIMARY KEY,
-  content TEXT NOT NULL,
-  embedding vector(1536) NOT NULL,
-  metadata JSONB
+CREATE TABLE IF NOT EXISTS rag_docs (
+  id        SERIAL PRIMARY KEY,
+  content   TEXT NOT NULL,
+  metadata  JSONB,
+  embedding VECTOR(1536)
 );
-
-CREATE INDEX IF NOT EXISTS kb_docs_hnsw
-  ON kb_docs USING hnsw (embedding vector_cosine_ops);
 ```
 
-> **维度说明**：按 embedding 模型的输出维度修改 `vector(N)`：
-> - OpenAI `text-embedding-3-small` → 1536
-> - OpenAI `text-embedding-3-large` → 3072
-> - BGE-base → 768
+> 用 Ollama `bge-base-zh` 时把 `VECTOR(1536)` 改成 `VECTOR(768)`。
 
-**操作**：点击节点右上角 ▶️ Execute Node，看到绿色 ✓ 即建表成功。这条工作流跑完即可关闭，无需再动。
+点击 **Execute step**，看到 `{ "success": true }` 即建表成功。
 
 ---
 
-## 4. 工作流 2：`rag-ingest`（入库）
+## 2. 步骤二：灌库（Insert Documents 模式）
 
-**节点链**：Manual Trigger → Edit Fields (Set) → Embeddings OpenAI → OpenGauss DataVec
+在同一工作流再画一段：
 
-### 节点配置
+```
+[Manual Trigger]
+   │ main
+   ▼
+[Set: 准备文档]
+   │ main
+   ▼
+[openGauss DataVec Store: Insert Documents]  ◄── ai_embedding ── [Embeddings OpenAI]
+   │ main
+   ▼
+[NoOp]
+```
 
-#### 节点 1：Manual Trigger
-无需配置。
+**Set 节点**（准备 3 篇示例文档，每条 item 一篇）：
 
-#### 节点 2：Edit Fields (Set)
-- Mode：Manual Mapping
-- 添加字段：
-  - Name：`content`
-  - Value：`openGauss DataVec 支持 HNSW、IVFFLAT、DISKANN 三种向量索引`
-- 多条记录可继续 **Add Field**，或改用 **Code** 节点输出数组
+```json
+[
+  { "content": "openGauss 是华为开源的关系型数据库", "metadata": { "source": "intro" } },
+  { "content": "DataVec 是 openGauss 的向量扩展", "metadata": { "source": "intro" } },
+  { "content": "n8n 是基于节点的自动化工作流平台", "metadata": { "source": "intro" } }
+]
+```
 
-#### 节点 3：Embeddings OpenAI
-- Credential：OpenAI
-- Model：`text-embedding-3-small`
-- Input：`={{ $json.content }}`
+**openGauss DataVec Store** 节点字段：
 
-#### 节点 4：OpenGauss DataVec
-- Credential：OpenGauss DataVec
-- Operation：`Insert Documents`
-- Table Name：`kb_docs`
-- Documents（点 **Add Document**）：
-  - Content：`={{ $json.content }}`
-  - Embedding：`={{ $json.embedding }}`
-  - Metadata：留空或 `={{ {} }}`
+- **Mode** = `Insert Documents`
+- **Table Name** = `rag_docs`
+- **Distance Strategy** = `Cosine`
+- **Dimensions** = `1536`（与 Embeddings 模型一致）
+- Embedding 槽接 **Embeddings OpenAI**（模型选 `text-embedding-3-small`）
 
-**操作**：点顶部 **Execute Workflow**，节点全绿即入库成功。
+点击 **Execute workflow**。成功后输出：
+
+```json
+{ "success": true, "insertedCount": 3, "tableName": "rag_docs" }
+```
 
 ---
 
-## 5. 工作流 3：`rag-ask`（问答）
+## 3. 步骤三：问答（Retrieve 模式 + Q&A Chain）
 
-**节点链**：Webhook → Embeddings OpenAI → OpenGauss DataVec → Code → OpenAI Chat → Respond to Webhook
-
-### 节点配置
-
-#### 节点 1：Webhook
-- HTTP Method：`POST`
-- Path：`ask`
-- Respond：`Using Respond to Webhook Node`
-
-#### 节点 2：Embeddings OpenAI
-- Credential：OpenAI
-- Model：`text-embedding-3-small`
-- Input：`={{ $json.body.question }}`
-
-#### 节点 3：OpenGauss DataVec
-- Credential：OpenGauss DataVec
-- Operation：`Vector Search`
-- Table Name：`kb_docs`
-- Query Vector：`={{ $json.embedding }}`
-- Limit：`5`
-- Distance Strategy：`Cosine`
-
-#### 节点 4：Code（拼 context）
-- Mode：**Run Once for All Items**
-- 代码：
-
-```javascript
-const ctx = items.map(i => i.json.content).join('\n---\n');
-return [{ json: { context: ctx } }];
-```
-
-#### 节点 5：OpenAI Chat（Message a Model）
-- Credential：OpenAI
-- Model：`gpt-4o-mini`
-- Messages：
-  - **System**：`你是知识库助手，只根据提供的资料回答，不知道就说不知道`
-  - **User**：
+新建一个工作流（或在原工作流接一段问答链）：
 
 ```
-资料:
-{{ $json.context }}
-
-问题: {{ $('Webhook').item.json.body.question }}
+[Chat Trigger]
+   │ main
+   ▼
+[Question and Answer Chain] ◄── ai_languageModel ── [OpenAI Chat Model]
+                ▲
+                │ ai_vectorStore
+                │
+[openGauss DataVec Store: Retrieve (As Vector Store)] ◄── ai_embedding ── [Embeddings OpenAI]
 ```
 
-#### 节点 6：Respond to Webhook
-- Response Body：`={{ $json.message.content }}`
+**openGauss DataVec Store** 字段：
+
+- **Mode** = `Retrieve Documents (As Vector Store)`
+- **Table Name** = `rag_docs`
+- **Distance Strategy** = `Cosine`
+- **Top K** = `3`
+- 不要填 Dimensions（仅 Insert 模式需要）
+- Embedding 槽接同一个 **Embeddings OpenAI**
+
+**Question and Answer Chain**：默认即可，把 LM 槽接 `OpenAI Chat Model`，VS 槽接上面的向量节点。
+
+**Chat Trigger**：直接打开 Test chat。
+
+试问：
+
+```
+什么是 DataVec？
+```
+
+期望回答包含「openGauss 的向量扩展」字样。打开 **Question and Answer Chain** 的 *Logs*，可以看到召回了 metadata `source=intro` 的文档片段。
 
 ---
 
-## 6. 启用与测试
+## 4. 进阶：把 Retrieve 换成 Agent Tool
 
-1. 在 `init-kb-table` 中执行一次（部署时一次性操作）
-2. 在 `rag-ingest` 中填入文本，点 **Execute Workflow** 入库
-3. 将 `rag-ask` 工作流右上角切换到 **Active**
-4. 终端测试：
+把上面工作流的 `Retrieve (As Vector Store)` 改成 `Retrieve Documents (As Tool for AI Agent)`，输出类型从 `ai_vectorStore` 变 `ai_tool`，再把它接到 **AI Agent** 节点的 **Tools** 槽。
 
-```bash
-curl -X POST http://localhost:5678/webhook/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"openGauss DataVec 支持哪些索引？"}'
-```
+- **Tool Description**：`Search openGauss / DataVec / n8n internal knowledge base. Use when the user asks about openGauss features, DataVec capabilities, or n8n usage.`
 
-返回内容应为 LLM 基于已入库知识给出的中文回答。
+Agent 会在判断需要时主动调用工具，对长对话与多工具混用更合适。详见 [VECTOR_STORE_GUIDE.md §3.4](./VECTOR_STORE_GUIDE.md)。
 
 ---
 
-## 7. 简化建议
-
-如果不希望维护 3 条工作流，可将 `init-kb-table` 合并进 `rag-ingest`：在 `rag-ingest` 链路最前面加一个 OpenGauss DataVec 的 Execute Query 节点，执行 `CREATE TABLE IF NOT EXISTS ...`（幂等，每次跑都安全）。
-
-合并后只剩 2 条工作流：
-- `rag-ingest`：建表 + 入库
-- `rag-ask`：问答
-
----
-
-## 8. 常见排错
+## 5. 排错清单
 
 | 现象 | 排查 |
-|------|------|
-| 节点连不上 openGauss | 凭据 **Test** 是否通过；检查 Host/Port/账号密码 |
-| Embeddings 节点报错 | 检查 OpenAI Key 余额、网络代理 |
-| Vector Search 返回空 | 先回 `rag-ingest` 入库再查；确认查询的 `tableName` 一致 |
-| 维度报错 `expected N dimensions, got M` | embedding 模型维度与表 `vector(N)` 不一致，对齐建表语句 |
-| Webhook 触发 404 | 工作流未切到 **Active**；URL 用 Production URL 不是 Test URL |
-| `type "vector" does not exist` | openGauss 版本不支持 DataVec，升级到 7.0+ |
+| --- | --- |
+| 灌库报 `relation does not exist` 还失败 | 检查 Insert Documents 是否填了 **Dimensions** |
+| 召回结果不相关 | 确认灌库与召回使用同一 Embeddings 模型；调大 Top K；试 `Cosine` |
+| Q&A 回答说不知道 | 看 Q&A Chain Logs：是否召回了相关片段？若否，问题表述与文档差异过大 |
+| 报 `vector has X dimensions, expected Y` | 模型换过了 —— `DROP TABLE rag_docs;` 后重灌 |
+| Chat Trigger 没反应 | 必须打开 *Test chat* 面板，并且工作流处于 Active 状态（或手动 Execute workflow） |
 
 ---
 
-## 9. 后续可扩展方向（按需）
+## 6. 下一步
 
-- **多租户**：在 `kb_docs` 加 `tenant_id` 字段，Vector Search 用 `metadataFilter` 过滤
-- **去重**：入库前用 `content_hash` 查询是否已存在
-- **Rerank**：在 Vector Search 后接 BGE/Cohere 重排
-- **缓存**：在 `rag-ask` 入口加 Redis 节点缓存高频问题
-- **审计**：每次入库/查询写入 `kb_operations_log` 表，便于排查
-
-更详细的功能验证请参考 [INTEGRATION_TEST_GUIDE.md](./INTEGRATION_TEST_GUIDE.md)。
+- 把 Manual / Set 换成真实数据源（PDF、网页、Notion、数据库）+ Splitter
+- 把灌库工作流改成 Cron 定时增量同步
+- 用 **openGauss** 节点 Execute Query 做 metadata 复杂过滤（参考 [SQL_NODE_GUIDE.md](./SQL_NODE_GUIDE.md)）
+- 调研索引：在 `embedding` 列上建 HNSW / IVFFLAT 索引提升大库召回速度

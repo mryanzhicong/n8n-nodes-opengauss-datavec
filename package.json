@@ -29,7 +29,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && copyfiles \"nodes/**/*.svg\" dist/",
+    "build": "tsc && copyfiles \"nodes/**/*.svg\" \"nodes/**/*.node.json\" dist/",
     "dev": "tsc --watch",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
@@ -42,7 +42,8 @@
       "dist/credentials/OpenGaussDataVec.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/VectorStoreOpenGauss/VectorStoreOpenGauss.node.js"
+      "dist/nodes/VectorStoreOpenGauss/VectorStoreOpenGauss.node.js",
+      "dist/nodes/OpenGauss/OpenGauss.node.js"
     ]
   },
   "dependencies": {

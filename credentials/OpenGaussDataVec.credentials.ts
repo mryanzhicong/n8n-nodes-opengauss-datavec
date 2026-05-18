@@ -3,7 +3,7 @@ import type { ICredentialType, INodeProperties } from 'n8n-workflow';
 export class OpenGaussDataVec implements ICredentialType {
 	name = 'openGaussDataVecApi';
 
-	displayName = 'OpenGauss DataVec';
+	displayName = 'openGauss DataVec';
 
 	documentationUrl = 'https://docs.opengauss.org/';
 

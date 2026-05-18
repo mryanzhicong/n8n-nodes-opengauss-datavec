@@ -51,12 +51,14 @@ const modeProperty: INodeProperties = {
 			value: 'retrieve',
 			description: 'Retrieve documents from vector store to provide to AI nodes',
 			action: 'Retrieve documents for AI processing',
+			outputConnectionType: NodeConnectionTypes.AiVectorStore,
 		},
 		{
 			name: 'Retrieve Documents (As Tool for AI Agent)',
 			value: 'retrieve-as-tool',
 			description: 'Retrieve documents from vector store to use as a tool with an AI agent',
 			action: 'Retrieve documents as tool for AI agent',
+			outputConnectionType: NodeConnectionTypes.AiTool,
 		},
 	],
 	default: 'retrieve',
@@ -193,7 +195,7 @@ const allProperties: INodeProperties[] = [
 // ============================================================
 
 const nodeDescription: INodeTypeDescription = {
-	displayName: 'OpenGauss DataVec Vector Store',
+	displayName: 'openGauss DataVec Store',
 	name: 'openGaussDataVec',
 	icon: 'file:opengauss.svg',
 	group: ['transform'],
@@ -201,7 +203,22 @@ const nodeDescription: INodeTypeDescription = {
 	subtitle: '= {"load": "Get Many", "insert": "Insert Documents", "retrieve": "Retrieve (Vector Store)", "retrieve-as-tool": "Retrieve (Tool)"}[$parameter["mode"]] ',
 	description: 'Work with openGauss DataVec vector database',
 	defaults: {
-		name: 'OpenGauss DataVec Vector Store',
+		name: 'openGauss DataVec Store',
+	},
+	codex: {
+		categories: ['AI'],
+		subcategories: {
+			AI: ['Vector Stores', 'Tools', 'Root Nodes'],
+			'Vector Stores': ['Other Vector Stores'],
+			Tools: ['Other Tools'],
+		},
+		resources: {
+			primaryDocumentation: [
+				{
+					url: 'https://docs.opengauss.org/',
+				},
+			],
+		},
 	},
 	inputs: `={{
 		((parameter) => {
