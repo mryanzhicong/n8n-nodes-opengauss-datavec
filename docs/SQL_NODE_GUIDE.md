@@ -188,11 +188,20 @@ RETURNING *;
 
 **用途**：三种破坏性操作。
 
-| Command | 行为 | 额外字段 |
+**参数**：
+
+| 字段 | 字段键名 | 取值 | 说明 |
+| --- | --- | --- | --- |
+| **Command** | `deleteCommand` | `truncate` / `delete` / `drop` | 选择三种破坏性操作之一；工作流 JSON 里以该键名落盘 |
+| **Schema / Table** | `schema` / `table` | — | 目标表 |
+
+各 Command 取值对应的行为与额外字段：
+
+| `deleteCommand` | 行为 | 额外字段 |
 | --- | --- | --- |
-| **Truncate** | `TRUNCATE TABLE` 清空数据保留结构 | **Restart Sequences**（RESTART IDENTITY）、Options → **Cascade** |
-| **Delete** | `DELETE FROM ... WHERE` 按条件删除 | **Select Rows** + **Combine Conditions** |
-| **Drop** | `DROP TABLE IF EXISTS` 删表 | Options → **Cascade** |
+| `truncate` | `TRUNCATE TABLE` 清空数据保留结构 | **Restart Sequences**（RESTART IDENTITY）、Options → **Cascade** |
+| `delete` | `DELETE FROM ... WHERE` 按条件删除 | **Select Rows** + **Combine Conditions** |
+| `drop` | `DROP TABLE IF EXISTS` 删表 | Options → **Cascade** |
 
 **SQL 示例**：
 

@@ -39,6 +39,16 @@ CREATE TABLE IF NOT EXISTS rag_docs (
 
 > 用 Ollama `bge-base-zh` 时把 `VECTOR(1536)` 改成 `VECTOR(768)`。
 
+**Embeddings 模型与维度对照**（请根据实际使用的 Embeddings 模型设置对应维度）：
+
+| Embeddings 模型 | 维度 |
+|----------------|------|
+| OpenAI `text-embedding-3-small` | 1536 |
+| Ollama `bge-base-zh-v1.5` | 768 |
+| Ollama `nomic-embed-text` | 768 |
+
+> 本仓库 `templates/` 下的工作流模板默认使用 Ollama `bge-base-zh-v1.5`，维度为 **768**。
+
 点击 **Execute step**，看到 `{ "success": true }` 即建表成功。
 
 ---
@@ -94,12 +104,26 @@ CREATE TABLE IF NOT EXISTS rag_docs (
 [Chat Trigger]
    │ main
    ▼
-[Question and Answer Chain] ◄── ai_languageModel ── [OpenAI Chat Model]
+[Question and Answer Chain] ◄── ai_languageModel ── [Ollama Chat Model]
+                ▲
+                │ ai_retriever
+                │
+[Vector Store Retriever]
                 ▲
                 │ ai_vectorStore
                 │
-[openGauss DataVec Store: Retrieve (As Vector Store)] ◄── ai_embedding ── [Embeddings OpenAI]
+[openGauss DataVec Store: Retrieve (As Vector Store)] ◄── ai_embedding ── [Embeddings Ollama]
 ```
+
+连接关系（与 `templates/RAG.json` 一致）：
+
+- **Embeddings Ollama** 输出 `ai_embedding` → **openGauss DataVec Store**
+- **openGauss DataVec Store** 输出 `ai_vectorStore` → **Vector Store Retriever**
+- **Vector Store Retriever** 输出 `ai_retriever` → **Question and Answer Chain**
+- **Ollama Chat Model**（或 OpenAI Chat Model）输出 `ai_languageModel` → **Question and Answer Chain**
+- **Chat Trigger** 输出 `main` → **Question and Answer Chain**
+
+> 注意：`Question and Answer Chain` 的检索槽是 `ai_retriever`，而非直接的 `ai_vectorStore`。中间需要一个 **Vector Store Retriever** 节点把 `ai_vectorStore` 转成 `ai_retriever`。如果省掉这一步，连线会无法成立。
 
 **openGauss DataVec Store** 字段：
 

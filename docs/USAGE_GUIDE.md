@@ -107,6 +107,7 @@ pnpm dev       # 在 n8n 源码目录执行
 - 节点选 **openGauss DataVec Store**
 - **Mode** = `Insert Documents`
 - **Schema** = `public`, **Table** = `demo_vectors`
+  - Schema 默认为 `public`，大多数场景无需修改；仅在操作非默认 schema 时手动指定。
 - **Distance Strategy** = `Cosine`
 - **Dimensions** = `1536`（如表不存在会按此维度自动建表）
 - 上游 Main 输入需包含 `content`（或 `text` / `pageContent`）字段，可选 `metadata` 对象

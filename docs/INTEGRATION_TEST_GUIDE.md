@@ -163,11 +163,24 @@ CREATE TABLE IF NOT EXISTS qa_users (
 
 ### 3.6 openGauss DataVec Store 节点 4 种 Mode 各跑一遍
 
+> 注意区分两类表：§3.5 的 `qa_users` 是 **业务表**（普通业务字段），用于验证通用 SQL 节点；本节使用的是 **向量表**（含 `embedding VECTOR(N)` 列），用于验证向量节点。两者表结构与用途不同，不要混用。
+
+准备一张向量表（首次执行 Insert Documents 时也会按 Dimensions 自动建表）：
+
+```sql
+CREATE TABLE IF NOT EXISTS rag_docs (
+  id        SERIAL PRIMARY KEY,
+  content   TEXT NOT NULL,
+  metadata  JSONB,
+  embedding VECTOR(768)
+);
+```
+
 | # | Mode | 验证点 |
 | --- | --- | --- |
-| 1 | **Insert Documents** | 灌 3 篇文档，返回 `insertedCount=3`；DB 中查 `qa_users` 同库表数据存在 |
-| 2 | **Get Many** | 给 prompt，返回 Top K 文档与 score |
-| 3 | **Retrieve Documents (As Vector Store)** | 输出口可挂到 Q&A Chain 的 VS 槽 |
+| 1 | **Insert Documents** | 向 `rag_docs` 灌 3 篇文档，返回 `insertedCount=3`；DB 中查 `rag_docs` 行数对应增加 |
+| 2 | **Get Many** | 对 `rag_docs` 给 prompt，返回 Top K 文档与 score |
+| 3 | **Retrieve Documents (As Vector Store)** | 输出口可经 Vector Store Retriever 挂到 Q&A Chain 的 `ai_retriever` 槽 |
 | 4 | **Retrieve Documents (As Tool for AI Agent)** | 输出口可挂到 AI Agent 的 Tools 槽，Tool Description 显示在 Agent 工具列表 |
 
 ---

@@ -1,13 +1,28 @@
-# openGauss DataVec Vector Store Node for n8n
+# n8n-nodes-opengauss-datavec
 
-An n8n community node for interacting with openGauss DataVec vector database, enabling vector similarity search and document management within n8n workflows.
+An n8n community node package for openGauss DataVec — provides both an **AI Vector Store** node for RAG/agent workflows and a **general-purpose SQL** node for standard database operations.
 
 ## Features
 
-- **Vector Similarity Search** — Query documents by vector similarity with configurable top-K results
-- **Document Insert** — Insert documents with embeddings into openGauss DataVec tables
-- **Index Management** — Create, rebuild, and drop vector indexes on your tables
-- **Custom Query** — Execute raw SQL queries against your DataVec-enabled tables
+### Vector Store Node (`openGauss DataVec Store`)
+
+AI Vector Store sub-node that integrates with n8n AI Agent, Retriever, and other LangChain nodes.
+
+- **Get Many** — Vector similarity search, returns Top-K results
+- **Insert Documents** — Insert documents with embeddings (auto-creates table on first run)
+- **Retrieve Documents (As Vector Store)** — Use as a Vector Store Retriever sub-node
+- **Retrieve Documents (As Tool for AI Agent)** — Use as an AI Agent tool node
+
+Configurable: Schema, Table, Dimensions, Distance Strategy, Top K, Metadata Filter.
+
+### SQL Node (`openGauss`)
+
+General-purpose execution node for standard database operations.
+
+- **Execute SQL** — Run arbitrary SQL queries
+- **Insert / Update / Upsert / Delete / Select** — CRUD operations with a visual UI
+
+Configurable: Schema, Table, Columns, WHERE conditions, etc.
 
 ## Supported Distance Metrics
 
@@ -44,6 +59,14 @@ An n8n community node for interacting with openGauss DataVec vector database, en
 ```bash
 npm install n8n-nodes-opengauss-datavec
 ```
+
+## Quick Start
+
+See [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) for detailed usage instructions and workflow examples.
+
+## Credentials
+
+Both nodes share the **openGauss DataVec** credential (Host, Port, Database, User, Password).
 
 ## License
 
