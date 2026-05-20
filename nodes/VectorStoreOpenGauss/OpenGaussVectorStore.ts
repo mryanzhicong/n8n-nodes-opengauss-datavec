@@ -32,6 +32,17 @@ export class OpenGaussVectorStore extends VectorStore {
   }
 
   async addVectors(vectors: number[][], documents: Document[]): Promise<void> {
+    await this.addVectorsWithCount(vectors, documents);
+  }
+
+  async addDocuments(documents: Document[]): Promise<void> {
+    await this.addDocumentsWithCount(documents);
+  }
+
+  /**
+   * Like addVectors but returns the actual number of inserted rows.
+   */
+  async addVectorsWithCount(vectors: number[][], documents: Document[]): Promise<number> {
     await this.ensureTable(vectors[0]?.length);
 
     const docs = documents.map((doc, i) => ({
@@ -40,16 +51,19 @@ export class OpenGaussVectorStore extends VectorStore {
       metadata: doc.metadata as Record<string, unknown> | undefined,
     }));
 
-    await this.client.insertDocuments({
+    return await this.client.insertDocuments({
       tableName: this.tableName,
       documents: docs,
     });
   }
 
-  async addDocuments(documents: Document[]): Promise<void> {
+  /**
+   * Like addDocuments but returns the actual number of inserted rows.
+   */
+  async addDocumentsWithCount(documents: Document[]): Promise<number> {
     const texts = documents.map((doc) => doc.pageContent);
     const vectors = await this.embeddings.embedDocuments(texts);
-    await this.addVectors(vectors, documents);
+    return await this.addVectorsWithCount(vectors, documents);
   }
 
   async similaritySearchVectorWithScore(
@@ -77,7 +91,9 @@ export class OpenGaussVectorStore extends VectorStore {
   private async ensureTable(vectorLength?: number): Promise<void> {
     if (this.tableCreated) return;
     const dims = this.dimensions ?? vectorLength;
-    if (!dims) return;
+    if (!dims) {
+      throw new Error('Vector dimensions unknown. Set the "dimensions" parameter or ensure the embedding model returns vectors.');
+    }
 
     await this.client.createTable({
       tableName: this.tableName,

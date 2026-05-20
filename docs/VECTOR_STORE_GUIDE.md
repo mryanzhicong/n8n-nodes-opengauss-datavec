@@ -31,7 +31,7 @@
 
 下列字段在多个 Mode 下复用：
 
-- **Table Name**（必填）：向量表名。Insert 模式首次使用时会按 Dimensions 自动建表；其它模式要求表已存在。
+- **Schema**（默认 `public`）和 **Table**（必填）：向量表的 schema 与表名。Insert 模式首次使用时会按 Dimensions 自动建表；其它模式要求表已存在。
 - **Distance Strategy**：`L2` / `Cosine` / `Inner Product` / `Manhattan`，默认 `Cosine`。
 - **Top K**：返回数量，默认 `10`。仅 `load` / `retrieve` / `retrieve-as-tool` 可见。
 - **Metadata Filter**：JSON 对象字符串，按 metadata 字段过滤。仅 `load` / `retrieve` / `retrieve-as-tool` 可见。
@@ -62,7 +62,7 @@
 }
 ```
 
-**必填参数**：Table Name、Prompt、Top K。可选：Distance Strategy、Metadata Filter。
+**必填参数**：Schema（默认 `public`）、Table、Prompt、Top K。可选：Distance Strategy、Metadata Filter。
 
 **示例工作流**：
 
@@ -85,10 +85,10 @@
 **输出**：Main，固定一条汇总：
 
 ```json
-{ "success": true, "insertedCount": 42, "tableName": "demo_vectors" }
+{ "success": true, "insertedCount": 42, "tableName": "public.demo_vectors" }
 ```
 
-**必填参数**：Table Name、Dimensions（首次建表必须）、Distance Strategy。
+**必填参数**：Schema（默认 `public`）、Table、Dimensions（首次建表必须）、Distance Strategy。
 
 **示例工作流**：
 
@@ -111,7 +111,7 @@
 
 **输出**：`ai_vectorStore`，挂到下游 Chain / Retriever 的 Vector Store 槽。
 
-**必填参数**：Table Name。常用：Distance Strategy、Top K、Metadata Filter。
+**必填参数**：Schema（默认 `public`）、Table。常用：Distance Strategy、Top K、Metadata Filter。
 
 **示例工作流（RAG 问答）**：
 
@@ -137,7 +137,7 @@
 
 **输出**：`ai_tool`，直接挂到 AI Agent 节点的 **Tools** 槽。
 
-**必填参数**：Table Name、Tool Description（**写清楚什么场景该调用**，Agent 靠这段文本决策）。常用：Top K、Metadata Filter。
+**必填参数**：Schema（默认 `public`）、Table、Tool Description（**写清楚什么场景该调用**，Agent 靠这段文本决策）。常用：Top K、Metadata Filter。
 
 **Tool Description 撰写要点**：
 

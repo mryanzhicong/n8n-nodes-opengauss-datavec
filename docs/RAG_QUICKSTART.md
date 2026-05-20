@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS rag_docs (
 **openGauss DataVec Store** 节点字段：
 
 - **Mode** = `Insert Documents`
-- **Table Name** = `rag_docs`
+- **Schema** = `public`, **Table** = `rag_docs`
 - **Distance Strategy** = `Cosine`
 - **Dimensions** = `1536`（与 Embeddings 模型一致）
 - Embedding 槽接 **Embeddings OpenAI**（模型选 `text-embedding-3-small`）
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS rag_docs (
 点击 **Execute workflow**。成功后输出：
 
 ```json
-{ "success": true, "insertedCount": 3, "tableName": "rag_docs" }
+{ "success": true, "insertedCount": 3, "tableName": "public.rag_docs" }
 ```
 
 ---
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS rag_docs (
 **openGauss DataVec Store** 字段：
 
 - **Mode** = `Retrieve Documents (As Vector Store)`
-- **Table Name** = `rag_docs`
+- **Schema** = `public`, **Table** = `rag_docs`
 - **Distance Strategy** = `Cosine`
 - **Top K** = `3`
 - 不要填 Dimensions（仅 Insert 模式需要）

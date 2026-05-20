@@ -68,9 +68,18 @@ const modeProperty: INodeProperties = {
 // Shared Parameters
 // ============================================================
 
-const tableNameProperty: INodeProperties = {
-	displayName: 'Table Name',
-	name: 'tableName',
+const schemaProperty: INodeProperties = {
+	displayName: 'Schema',
+	name: 'schema',
+	type: 'string',
+	required: true,
+	default: 'public',
+	description: 'Database schema name',
+};
+
+const tableProperty: INodeProperties = {
+	displayName: 'Table',
+	name: 'table',
 	type: 'string',
 	required: true,
 	default: '',
@@ -181,7 +190,8 @@ const topKProperty: INodeProperties = {
 
 const allProperties: INodeProperties[] = [
 	modeProperty,
-	tableNameProperty,
+	schemaProperty,
+	tableProperty,
 	distanceStrategyProperty,
 	promptProperty,
 	toolDescriptionProperty,
@@ -317,7 +327,9 @@ export class VectorStoreOpenGauss implements INodeType {
 			: credentials.ssl === 'disable' || credentials.ssl === 'allow' ? false
 			: undefined;
 
-		const tableName = this.getNodeParameter('tableName', itemIndex) as string;
+		const schema = (this.getNodeParameter('schema', itemIndex, 'public') as string) || 'public';
+		const table = this.getNodeParameter('table', itemIndex) as string;
+		const tableName = `${schema}.${table}`;
 		const distanceStrategy = this.getNodeParameter('distanceStrategy', itemIndex) as DistanceStrategy;
 		const topK = this.getNodeParameter('topK', itemIndex, 10) as number;
 		const metadataFilterStr = this.getNodeParameter('metadataFilter', itemIndex, '') as string;
@@ -372,7 +384,24 @@ export class VectorStoreOpenGauss implements INodeType {
 			return { response: tool };
 		}
 
-		return { response: vectorStore };
+		// Workaround: n8n's instanceof VectorStore check fails when our node uses a different
+		// @langchain/core instance (n8n: 1.1.41, ours: 1.1.46).
+		// Return a {vectorStore, reranker} shape so n8n's ContextualCompressionRetriever path
+		// is used with a passthrough compressor, which returns documents unchanged.
+		const passthroughReranker = {
+			async compressDocuments(
+				documents: import('@langchain/core/documents').DocumentInterface[],
+				_query: string,
+			): Promise<import('@langchain/core/documents').DocumentInterface[]> {
+				return documents;
+			},
+		};
+		return {
+			response: {
+				vectorStore,
+				reranker: passthroughReranker,
+			},
+		};
 	}
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -385,7 +414,9 @@ export class VectorStoreOpenGauss implements INodeType {
 			: credentials.ssl === 'disable' || credentials.ssl === 'allow' ? false
 			: undefined;
 
-		const tableName = this.getNodeParameter('tableName', 0) as string;
+		const schema = (this.getNodeParameter('schema', 0, 'public') as string) || 'public';
+		const table = this.getNodeParameter('table', 0) as string;
+		const tableName = `${schema}.${table}`;
 		const distanceStrategy = this.getNodeParameter('distanceStrategy', 0) as DistanceStrategy;
 
 		const connectionConfig: DataVecConfig = {
@@ -461,12 +492,12 @@ export class VectorStoreOpenGauss implements INodeType {
 					documents.push(new Document({ pageContent, metadata }));
 				}
 
-				await vectorStore.addDocuments(documents);
+				const insertedCount = await vectorStore.addDocumentsWithCount(documents);
 
 				returnData.push({
 					json: {
 						success: true,
-						insertedCount: documents.length,
+						insertedCount,
 						tableName,
 					},
 				});

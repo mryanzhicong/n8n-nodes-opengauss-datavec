@@ -106,15 +106,15 @@ pnpm dev       # 在 n8n 源码目录执行
 
 - 节点选 **openGauss DataVec Store**
 - **Mode** = `Insert Documents`
-- **Table Name** = `demo_vectors`
+- **Schema** = `public`, **Table** = `demo_vectors`
 - **Distance Strategy** = `Cosine`
 - **Dimensions** = `1536`（如表不存在会按此维度自动建表）
 - 上游 Main 输入需包含 `content`（或 `text` / `pageContent`）字段，可选 `metadata` 对象
 - Embedding 槽接 **Embeddings OpenAI**（或 Ollama 等任意 Embeddings 节点）
 
-执行后，输出：`{ "success": true, "insertedCount": 1, "tableName": "demo_vectors" }`。
+执行后，输出：`{ "success": true, "insertedCount": 1, "tableName": "public.demo_vectors" }`。
 
-> 截图占位：在 n8n 画布选中节点，右侧参数面板 Mode 下拉、Table Name、Dimensions 自上而下排列。
+> 截图占位：在 n8n 画布选中节点，右侧参数面板 Mode 下拉、Schema、Table、Dimensions 自上而下排列。
 
 ### 示例 B：用 **openGauss** 跑一条原生 SQL
 

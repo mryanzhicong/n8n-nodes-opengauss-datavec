@@ -118,7 +118,7 @@ export class DataVecClient {
    */
   async createTable(options: CreateTableOptions): Promise<void> {
     const ifNotExists = options.ifNotExists ? 'IF NOT EXISTS' : '';
-    const sql = `CREATE TABLE ${ifNotExists} ${this.quoteIdent(options.tableName)} (
+    const sql = `CREATE TABLE ${ifNotExists} ${this.quoteTable(options.tableName)} (
       id SERIAL PRIMARY KEY,
       content TEXT NOT NULL,
       embedding vector(${options.dimensions}) NOT NULL,
@@ -134,7 +134,7 @@ export class DataVecClient {
   async createIndex(options: CreateIndexOptions): Promise<void> {
     const ops = OPERATOR_CLASS_MAP[options.distanceStrategy];
     const indexName = this.quoteIdent(options.indexName ?? `${options.tableName}_embedding_idx`);
-    const tableName = this.quoteIdent(options.tableName);
+    const tableName = this.quoteTable(options.tableName);
 
     let sql: string;
 
@@ -169,14 +169,14 @@ export class DataVecClient {
     try {
       await client.query('BEGIN');
 
-      const sql = `INSERT INTO ${this.quoteIdent(options.tableName)} (content, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`;
+      const sql = `INSERT INTO ${this.quoteTable(options.tableName)} (content, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`;
 
       let count = 0;
       for (const doc of options.documents) {
         const vectorStr = this.vectorToString(doc.embedding);
         const metadata = doc.metadata ?? null;
-        await client.query(sql, [doc.content, vectorStr, JSON.stringify(metadata)]);
-        count++;
+        const result = await client.query(sql, [doc.content, vectorStr, JSON.stringify(metadata)]);
+        count += result.rowCount ?? 0;
       }
 
       await client.query('COMMIT');
@@ -208,7 +208,7 @@ export class DataVecClient {
       }
 
       const operator = DISTANCE_OPERATOR_MAP[options.distanceStrategy];
-      const tableName = this.quoteIdent(options.tableName);
+      const tableName = this.quoteTable(options.tableName);
       const vectorStr = this.vectorToString(options.queryVector);
 
       // Build WHERE clause from metadata filter
@@ -253,7 +253,7 @@ export class DataVecClient {
    * Drop a table if it exists.
    */
   async dropTable(tableName: string): Promise<void> {
-    await this.pool.query(`DROP TABLE IF EXISTS ${this.quoteIdent(tableName)}`);
+    await this.pool.query(`DROP TABLE IF EXISTS ${this.quoteTable(tableName)}`);
   }
 
   /**
@@ -273,6 +273,14 @@ export class DataVecClient {
   private quoteIdent(name: string): string {
     // Double-quote identifiers, escaping any embedded double quotes
     return `"${name.replace(/"/g, '""')}"`;
+  }
+
+  /**
+   * Quote a possibly schema-qualified table name (e.g. "public.rag_docs" → "public"."rag_docs").
+   */
+  private quoteTable(tableName: string): string {
+    const parts = tableName.split('.');
+    return parts.map((p) => this.quoteIdent(p.trim())).join('.');
   }
 
   /**

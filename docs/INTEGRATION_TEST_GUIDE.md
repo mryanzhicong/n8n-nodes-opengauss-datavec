@@ -34,7 +34,15 @@ pnpm build          # tsc + copyfiles，产物在 dist/
 
 > `*.node.json`（codex 文件）必须存在，否则 `N8N_CUSTOM_EXTENSIONS` 加载链路会忽略内联 codex，导致节点分类丢失。
 
-### 1.3 启动 n8n
+### 1.3 初始化本地 @langchain/core 链接（首次或 pnpm install 后）
+
+```bash
+pnpm setup:dev   # 将 node_modules/@langchain/core symlink 到 n8n 同版本实例
+```
+
+> 原因：n8n 和自定义节点使用各自的 `@langchain/core` 副本会导致 `instanceof VectorStore` 跨模块失败，symlink 确保共享同一模块缓存。即使忘记执行，代码层 passthrough reranker 也会兜底，节点不会崩溃。
+
+### 1.4 启动 n8n
 
 ```bash
 export N8N_CUSTOM_EXTENSIONS=/abs/path/to/n8n-nodes-opengauss-datavec
