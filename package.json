@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-opengauss-datavec",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "n8n community node for openGauss DataVec vector database",
   "keywords": [
     "n8n",
