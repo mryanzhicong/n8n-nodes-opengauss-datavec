@@ -1,0 +1,130 @@
+{
+  "name": "Create Table",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -192
+      ],
+      "id": "c0729320-90e1-4206-ae45-90f87d565ba2",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS public.rag_docs (\n  id        SERIAL PRIMARY KEY,\n  content   TEXT NOT NULL,\n  metadata  JSONB,\n  embedding VECTOR(768)\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGauss",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -192
+      ],
+      "id": "e3c685d6-446b-457a-be75-fe5a7beaf456",
+      "name": "Create table public.rag_docs",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteTable",
+        "table": "rag_docs",
+        "deleteCommand": "drop",
+        "options": {}
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGauss",
+      "typeVersion": 1,
+      "position": [
+        224,
+        -192
+      ],
+      "id": "02013fe9-c458-4493-8d10-dc6aac5acb67",
+      "name": "Drop table table public.rag_docs",
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT column_name, data_type, is_nullable\nFROM information_schema.columns\nWHERE table_schema = 'public' AND table_name = 'rag_docs'\nORDER BY ordinal_position;",
+        "options": {}
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGauss",
+      "typeVersion": 1,
+      "position": [
+        672,
+        -192
+      ],
+      "id": "5ea6b636-6768-4fe0-9469-01dbebb4a1a6",
+      "name": "Query table structure public.rag_docs",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Drop table table public.rag_docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create table public.rag_docs": {
+      "main": [
+        [
+          {
+            "node": "Query table structure public.rag_docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drop table table public.rag_docs": {
+      "main": [
+        [
+          {
+            "node": "Create table public.rag_docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5945bd5e-d8b6-48b6-8fbe-4c65ce956083",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cbcc0bf92f6b7a8ab1fb5fce68f78c2abb6c7e8d4ed6936f2fe9bff41a74154a"
+  },
+  "id": "rzWro5skTVzHRKxh",
+  "tags": []
+}

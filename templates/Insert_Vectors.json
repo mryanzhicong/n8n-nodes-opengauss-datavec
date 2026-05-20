@@ -1,0 +1,194 @@
+{
+  "name": "Insert Vectors",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "insert",
+        "table": "rag_docs",
+        "dimensions": 768
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGaussDataVec",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "id": "95e0179f-7e8c-40ec-9878-28383ee61657",
+      "name": "openGauss DataVec Store",
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "quentinz/bge-base-zh-v1.5:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        960,
+        224
+      ],
+      "id": "acc4afc4-09db-40c6-9915-3c8068b56212",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "9bjoHLfiUFepLKLu",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "Document submission for storage",
+        "formDescription": "Please paste the link to your Markdown document below",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Markdown link",
+              "defaultValue": "https://raw.gitcode.com/opengauss/docs/raw/master/docs/zh/datavec/datavec_overview.md",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "19bf3518-fce1-481b-af08-556e0944a56b",
+      "name": "On form submission",
+      "webhookId": "8ad53f71-5c2a-4209-b603-81eeb79af39a",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// 获取上一步 HTTP Request 抓到的 Markdown 文本\nconst text = $input.first().json.data;\n\n// 使用正则表达式按 Markdown 标题（# ## ### 等）进行切分\nconst chunks = text.split(/(?=^#)/m).filter(chunk => chunk.trim().length > 0);\n\n// 输出切好的数据\nreturn chunks.map(chunk => {\n  // 提取第一行作为标题，剩下的作为正文内容\n  const lines = chunk.trim().split('\\n');\n  // 去掉标题前面的 # 和空格，得到纯净的标题\n  const title = lines[0].replace(/^#+\\s*/, ''); \n  // 标题后面的所有内容\n  const contentBody = lines.slice(1).join('\\n').trim(); \n\n  return {\n    json: {\n      // 💡 核心修改：将“标题”和“正文”用换行符拼接，保证语义完整\n      content: `${title}\\n${contentBody}`, \n      metadata: { \n        title: title, // 标题同时也保留在元数据里，方便后续过滤或展示\n        source: 'markdown_by_header' \n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        0
+      ],
+      "id": "410d7389-07ac-4b89-b29a-374b35d4774d",
+      "name": "Code in JavaScript: Document Chunking"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json['Markdown link'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        432,
+        0
+      ],
+      "id": "3dc91a54-76cf-44c1-b435-746c2909ac93",
+      "name": "HTTP Request: Download documents"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "rag_docs",
+        "returnAll": true,
+        "where": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGauss",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "ea3216dd-9b24-45e4-aeaa-ffbdb1184c0f",
+      "name": "Query vector data",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "openGauss DataVec Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Download documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "openGauss DataVec Store": {
+      "main": [
+        [
+          {
+            "node": "Query vector data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript: Document Chunking": {
+      "main": [
+        [
+          {
+            "node": "openGauss DataVec Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Download documents": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript: Document Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f056197b-72ca-47d0-91ce-fc1333ab8428",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cbcc0bf92f6b7a8ab1fb5fce68f78c2abb6c7e8d4ed6936f2fe9bff41a74154a"
+  },
+  "id": "NkvPrvEfWIVPwoRd",
+  "tags": []
+}

@@ -1,0 +1,97 @@
+{
+  "name": "Basic Retrieval",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2e809a51-9a6d-44ae-bc16-43e796f0db3b",
+      "name": "When chat message received",
+      "webhookId": "68da1b95-14d5-4fa3-95c3-6e4af9c0b8a1"
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "table": "rag_docs",
+        "prompt": "={{ $json.chatInput }}",
+        "topK": 3
+      },
+      "type": "n8n-nodes-opengauss-datavec.openGaussDataVec",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "ed89a120-5336-4f87-a955-c4adb7cf7464",
+      "name": "openGauss DataVec Store",
+      "credentials": {
+        "openGaussDataVecApi": {
+          "id": "z4tFavKhf0VwwHt7",
+          "name": "openGauss DataVec account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "quentinz/bge-base-zh-v1.5:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        304,
+        224
+      ],
+      "id": "926ff471-8550-40e8-9342-9848fc28587b",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "9bjoHLfiUFepLKLu",
+          "name": "Ollama account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "openGauss DataVec Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "openGauss DataVec Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "40ded8d3-ed3c-4711-ab73-06376b4781ea",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cbcc0bf92f6b7a8ab1fb5fce68f78c2abb6c7e8d4ed6936f2fe9bff41a74154a"
+  },
+  "id": "iQwGKl4oTO1iGUEk",
+  "tags": []
+}
